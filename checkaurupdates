@@ -7,13 +7,24 @@
 # Dependencies: pacman curl jq
 #
 
+cachedir="${XDG_CACHE_HOME:-$HOME/.cache/checkaurupdates}"
+
+download_aur_pkglist() {
+	if ! curl -fSs "https://aur.archlinux.org/packages.gz" | gzip -d - > "$1"; then
+		printf "Downloding AUR package list failed\n"
+		exit 1
+	fi
+	# remove date line
+	sed -i '1d' "$1"
+}
+
 get_query_urls() {
 	local url
 	local rpc="https://aur.archlinux.org/rpc.php?v=5&type=info"
 	local split=150 # do not exceed max query url size
 	local i=0
 
-	for pkg in "${foreign_packages[@]}"; do
+	for pkg in "$@"; do
 		if ((i == 0)); then
 			printf -v url "%s&arg[]=%s" "$rpc" "$pkg"
 		elif ((i % split == 0)); then
@@ -26,34 +37,38 @@ get_query_urls() {
 	printf "%s\n" "$url"
 }
 
-get_aur_packages() {
-	local query_urls
-
-	mapfile -t query_urls < <(get_query_urls)
-
-	for url in "${query_urls[@]}"; do
-		json="$(curl -qs --globoff "$url")"
-		mapfile -t -O "${#aur_packages[@]}"  aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "$json")
-	done
-}
-
 if ! type -p jq >/dev/null; then
 	printf "jq binary not found\n"
 	exit 1
 fi
 
-mapfile -t foreign_packages < <(pacman -Qmq)
-get_aur_packages
+mkdir -p "$cachedir"
+cd "$cachedir" || exit 1
 
-# Now we have array 'aur_packages' with all installed packages from AUR
-# that looks like this: ('name version' 'name version' ...)
+download_aur_pkglist "pkglist"
+mapfile -t installed_aur_packages < <(comm -12 <(sort pkglist) <(sort <(pacman -Qq)))
+mapfile -t query_urls < <(get_query_urls "${installed_aur_packages[@]}")
+
+# Create lookup array for local package versions
+declare -A local_packages
+while read -r pkgname pkgver; do
+	local_packages["$pkgname"]="$pkgver"
+done < <(pacman -Q "${installed_aur_packages[@]}")
+
+# Get package versions for installed AUR packages
+for url in "${query_urls[@]}"; do
+	json="$(curl -fSs --globoff "$url")" || exit 1
+	mapfile -t -O "${#aur_packages[@]}"  aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "$json")
+done
+
+# Now we have array 'local_packages' to lookup local package versions and array 'aur_packages'
+# with all installed packages from AUR that looks like this: ('name version' 'name version' ...)
 
 for pkg in "${aur_packages[@]}"; do
 	aur_version="${pkg/* }"
 	pkgname="${pkg/ *}"
 
-	mapfile -t pkg_info < <(pacman -Qi "$pkgname")
-	local_version="${pkg_info[1]/*: }"
+	local_version="${local_packages[$pkgname]}"
 
 	[[ "$local_version" == "$aur_version" ]] && continue
 
