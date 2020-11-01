@@ -15,15 +15,15 @@ get_query_urls() {
 
 	for pkg in "${foreign_packages[@]}"; do
 		if ((i == 0)); then
-			printf -v url "${rpc}&arg[]=${pkg}"
+			printf -v url "%s&arg[]=%s" "$rpc" "$pkg"
 		elif ((i % split == 0)); then
-			printf -v url "${url}\n${rpc}&arg[]=${pkg}"
+			printf -v url "%s\n%s&arg[]=%s" "$url" "$rpc" "$pkg"
 		else
-			printf -v url "${url}&arg[]=${pkg}"
+			printf -v url "%s&arg[]=%s" "$url" "$pkg"
 		fi
 		i=$((i + 1))
 	done
-	printf "%s\n" "${url}"
+	printf "%s\n" "$url"
 }
 
 get_aur_packages() {
@@ -32,8 +32,8 @@ get_aur_packages() {
 	mapfile -t query_urls < <(get_query_urls)
 
 	for url in "${query_urls[@]}"; do
-		json="$(curl -qs --globoff "${url}")"
-		mapfile -t -O "${#aur_packages[@]}"  aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "${json}")
+		json="$(curl -qs --globoff "$url")"
+		mapfile -t -O "${#aur_packages[@]}"  aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "$json")
 	done
 }
 
@@ -52,9 +52,9 @@ for pkg in "${aur_packages[@]}"; do
 	aur_version="${pkg/* }"
 	pkgname="${pkg/ *}"
 
-	mapfile -t pkg_info < <(pacman -Qi "${pkgname}")
+	mapfile -t pkg_info < <(pacman -Qi "$pkgname")
 	local_version="${pkg_info[1]/*: }"
 
-	ret="$(vercmp "${local_version}" "${aur_version}")"
-	((ret < 0)) && printf "aur/%s %s -> %s\n" "${pkgname}" "${local_version}" "${aur_version}"
+	ret="$(vercmp "$local_version" "$aur_version")"
+	((ret < 0)) && printf "aur/%s %s -> %s\n" "$pkgname" "$local_version" "$aur_version"
 done
