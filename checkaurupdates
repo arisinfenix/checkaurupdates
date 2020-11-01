@@ -1,0 +1,32 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2020 Michael Straube
+
+#
+# Description: Show AUR updates in the style of checkupdates
+# Dependencies: pacman curl jq
+#
+
+mapfile -t foreign_packages < <(pacman -Qmq)
+
+url="https://aur.archlinux.org/rpc.php?v=5&type=info"
+for pkg in "${foreign_packages[@]}"; do
+    url="${url}&arg[]=${pkg}"
+done
+
+json="$(curl -qs --globoff "${url}")"
+mapfile -t aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "${json}")
+
+# now we have an array with all installed packages from AUR
+# that looks like this: ('name version' 'name version' ...)
+
+for pkg in "${aur_packages[@]}"; do
+	aur_version="${pkg/* }"
+	pkgname="${pkg/ *}"
+
+	mapfile -t pkg_info < <(pacman -Qi "${pkgname}")
+	local_version="${pkg_info[1]/*: }"
+
+	ret="$(vercmp "${local_version}" "${aur_version}")"
+	((ret < 0)) && printf "aur/%s %s -> %s\n" "${pkgname}" "${local_version}" "${aur_version}"
+done
