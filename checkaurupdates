@@ -7,6 +7,11 @@
 # Dependencies: pacman curl jq
 #
 
+if ! type -p jq >/dev/null; then
+	printf "jq binary not found\n"
+	exit 1
+fi
+
 mapfile -t foreign_packages < <(pacman -Qmq)
 
 url="https://aur.archlinux.org/rpc.php?v=5&type=info"
