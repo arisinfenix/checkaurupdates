@@ -1,2 +1,5 @@
 # checkaurupdates
-Show AUR updates in the style of checkupdates.
+Check for AUR updates and display them in the style of checkupdates.
+
+## Known issues
+Currently only foreign packages are taken into account. (pacman -Qm)
