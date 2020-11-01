@@ -7,8 +7,6 @@
 # Dependencies: pacman curl jq
 #
 
-cachedir="${XDG_CACHE_HOME:-$HOME/.cache/checkaurupdates}"
-
 download_aur_pkglist() {
 	if ! curl -fSs "https://aur.archlinux.org/packages.gz" | gzip -d - > "$1"; then
 		printf "Downloding AUR package list failed\n"
@@ -42,11 +40,15 @@ if ! type -p jq >/dev/null; then
 	exit 1
 fi
 
-mkdir -p "$cachedir"
-cd "$cachedir" || exit 1
+if ! tmpdir=$(mktemp -d -t checkaurupdates.XXXXXXXX); then
+	printf "Failed to create temp directory\n"
+	exit 1
+fi
 
-download_aur_pkglist "pkglist"
-mapfile -t installed_aur_packages < <(comm -12 <(sort pkglist) <(sort <(pacman -Qq)))
+pkglist="$tmpdir/pkglist"
+
+download_aur_pkglist "$pkglist"
+mapfile -t installed_aur_packages < <(comm -12 <(sort "$pkglist") <(sort <(pacman -Qq)))
 mapfile -t query_urls < <(get_query_urls "${installed_aur_packages[@]}")
 
 # Create lookup array for local package versions
@@ -75,3 +77,5 @@ for pkg in "${aur_packages[@]}"; do
 	ret="$(vercmp "$local_version" "$aur_version")"
 	((ret < 0)) && printf "aur/%s %s -> %s\n" "$pkgname" "$local_version" "$aur_version"
 done
+
+rm -r "$tmpdir"
