@@ -7,22 +7,45 @@
 # Dependencies: pacman curl jq
 #
 
+get_query_urls() {
+	local url
+	local rpc="https://aur.archlinux.org/rpc.php?v=5&type=info"
+	local split=150 # do not exceed max query url size
+	local i=0
+
+	for pkg in "${foreign_packages[@]}"; do
+		if ((i == 0)); then
+			printf -v url "${rpc}&arg[]=${pkg}"
+		elif ((i % split == 0)); then
+			printf -v url "${url}\n${rpc}&arg[]=${pkg}"
+		else
+			printf -v url "${url}&arg[]=${pkg}"
+		fi
+		i=$((i + 1))
+	done
+	printf "%s\n" "${url}"
+}
+
+get_aur_packages() {
+	local query_urls
+
+	mapfile -t query_urls < <(get_query_urls)
+
+	for url in "${query_urls[@]}"; do
+		json="$(curl -qs --globoff "${url}")"
+		mapfile -t -O "${#aur_packages[@]}"  aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "${json}")
+	done
+}
+
 if ! type -p jq >/dev/null; then
 	printf "jq binary not found\n"
 	exit 1
 fi
 
 mapfile -t foreign_packages < <(pacman -Qmq)
+get_aur_packages
 
-url="https://aur.archlinux.org/rpc.php?v=5&type=info"
-for pkg in "${foreign_packages[@]}"; do
-    url="${url}&arg[]=${pkg}"
-done
-
-json="$(curl -qs --globoff "${url}")"
-mapfile -t aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "${json}")
-
-# now we have an array with all installed packages from AUR
+# Now we have array 'aur_packages' with all installed packages from AUR
 # that looks like this: ('name version' 'name version' ...)
 
 for pkg in "${aur_packages[@]}"; do
