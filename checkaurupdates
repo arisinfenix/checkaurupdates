@@ -55,6 +55,8 @@ for pkg in "${aur_packages[@]}"; do
 	mapfile -t pkg_info < <(pacman -Qi "$pkgname")
 	local_version="${pkg_info[1]/*: }"
 
+	[[ "$local_version" == "$aur_version" ]] && continue
+
 	ret="$(vercmp "$local_version" "$aur_version")"
 	((ret < 0)) && printf "aur/%s %s -> %s\n" "$pkgname" "$local_version" "$aur_version"
 done
