@@ -13,7 +13,7 @@ download_aur_pkglist() {
 		sed -i '1d' "$1"
 	else
 		printf "Downloding AUR package list failed\n"
-		exit 1
+		cleaup 1
 	fi
 }
 
@@ -34,6 +34,11 @@ get_query_urls() {
 		i=$((i + 1))
 	done
 	printf "%s\n" "$url"
+}
+
+cleanup() {
+	rm -r "$tmpdir"
+	exit "$1"
 }
 
 if ! type -p jq >/dev/null; then
@@ -60,7 +65,7 @@ done < <(pacman -Q "${installed_aur_packages[@]}")
 
 # Get package versions for installed AUR packages
 for url in "${query_urls[@]}"; do
-	json="$(curl -fSs --globoff "$url")" || exit 1
+	json="$(curl -fSs --globoff "$url")" || cleanup 1
 	mapfile -t -O "${#aur_packages[@]}"  aur_packages < <(jq -r '.results[] | .Name + " " + .Version' <<< "$json")
 done
 
@@ -81,7 +86,7 @@ done
 if (( ${#updates[@]} )); then
 	printf "%s\n" "${updates[@]}"
 else
-    exit 2
+    cleanup 2
 fi
 
-rm -r "$tmpdir"
+cleanup 0
