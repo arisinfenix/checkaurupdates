@@ -8,12 +8,13 @@
 #
 
 download_aur_pkglist() {
-	if ! curl -fSs "https://aur.archlinux.org/packages.gz" | gzip -d - > "$1"; then
+	if curl -fSs "https://aur.archlinux.org/packages.gz" | gzip -d - > "$1"; then
+		# remove date line
+		sed -i '1d' "$1"
+	else
 		printf "Downloding AUR package list failed\n"
 		exit 1
 	fi
-	# remove date line
-	sed -i '1d' "$1"
 }
 
 get_query_urls() {
@@ -67,15 +68,20 @@ done
 # with all installed packages from AUR that looks like this: ('name version' 'name version' ...)
 
 for pkg in "${aur_packages[@]}"; do
-	aur_version="${pkg/* }"
 	pkgname="${pkg/ *}"
-
+	aur_version="${pkg/* }"
 	local_version="${local_packages[$pkgname]}"
 
 	[[ "$local_version" == "$aur_version" ]] && continue
 
 	ret="$(vercmp "$local_version" "$aur_version")"
-	((ret < 0)) && printf "aur/%s %s -> %s\n" "$pkgname" "$local_version" "$aur_version"
+	((ret < 0)) && updates+=("aur/$pkgname $local_version -> $aur_version")
 done
+
+if (( ${#updates[@]} )); then
+	printf "%s\n" "${updates[@]}"
+else
+    exit 2
+fi
 
 rm -r "$tmpdir"
